@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dashboard Geofisika — Gempa Indonesia</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+:root{--navy:#17324d;--teal:#168b91;--bg:#f3f6f9;--ink:#203040;--muted:#657789;--line:#dce4eb}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);font-family:Segoe UI,Arial,sans-serif;color:var(--ink)}
+header{background:linear-gradient(120deg,#17324d,#176d78);color:#fff;padding:28px max(20px,calc((100% - 1250px)/2))}
+header h1{margin:0 0 8px;font-size:clamp(24px,3vw,34px)}header p{margin:0;color:#d8e9ee}
+main{max-width:1250px;margin:22px auto;padding:0 18px}
+.panel{background:#fff;border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:18px;box-shadow:0 4px 16px #18334b0a}
+.filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;align-items:end}
+label{display:block;font-size:12px;font-weight:700;color:var(--muted);margin-bottom:6px}
+input,select,button{font:inherit;border:1px solid #ccd7e1;border-radius:8px;padding:10px;background:#fff;color:var(--ink);width:100%}
+button{cursor:pointer;background:var(--navy);color:#fff;border:0;font-weight:650}button.secondary{background:#e7f0f3;color:var(--navy);border:1px solid #c9dce2}
+.actions{display:flex;gap:10px;flex-wrap:wrap}.actions button{width:auto}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:14px;margin-bottom:18px}
+.kpi{background:#fff;border:1px solid var(--line);border-radius:14px;padding:18px;min-height:105px}
+.kpi .label{font-size:12px;color:var(--muted);font-weight:700}.kpi .value{font-size:28px;font-weight:750;margin-top:9px;color:var(--navy)}
+.charts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.chartbox{min-height:320px}.chartbox h2,.panel h2{font-size:17px;margin:0 0 14px}.chartbox canvas{max-height:260px}
+.status{font-size:13px;color:var(--muted);margin-top:10px}.error{color:#a32929}
+table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:10px 8px;text-align:left;border-bottom:1px solid var(--line)}th{background:#f4f8fa;color:#516779;position:sticky;top:0}
+.tablewrap{overflow:auto;max-height:420px}.note{font-size:13px;color:var(--muted);line-height:1.55}
+@media(max-width:760px){.charts{grid-template-columns:1fr}.chartbox{min-height:280px}header{padding:24px 18px}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Dashboard Geofisika: Gempa Bumi Indonesia</h1>
+  <p>Eksplorasi kejadian gempa berdasarkan waktu, magnitudo, dan kedalaman — sumber data USGS Earthquake Catalog.</p>
+</header>
+<main>
+  <section class="panel">
+    <h2>Filter data</h2>
+    <div class="filters">
+      <div><label for="start">Tanggal mulai</label><input id="start" type="date" value="2025-01-01"></div>
+      <div><label for="end">Tanggal akhir</label><input id="end" type="date" value="2025-12-31"></div>
+      <div><label for="minmag">Magnitudo minimum</label><select id="minmag"><option value="2.5">M 2.5+</option><option value="3.5">M 3.5+</option><option value="4.5" selected>M 4.5+</option><option value="5.5">M 5.5+</option></select></div>
+      <div><label for="limit">Batas maksimum rekaman</label><select id="limit"><option value="500">500 kejadian</option><option value="1000" selected>1.000 kejadian</option><option value="2000">2.000 kejadian</option></select></div>
+      <div class="actions"><button id="load">Muat / Terapkan</button><button id="reset" class="secondary">Reset</button></div>
+    </div>
+    <div id="status" class="status">Siap memuat data dari USGS. Koneksi internet diperlukan.</div>
+  </section>
+  <section class="kpis">
+    <div class="kpi"><div class="label">Jumlah kejadian</div><div class="value" id="kCount">—</div></div>
+    <div class="kpi"><div class="label">Magnitudo rata-rata</div><div class="value" id="kMag">—</div></div>
+    <div class="kpi"><div class="label">Magnitudo maksimum</div><div class="value" id="kMax">—</div></div>
+    <div class="kpi"><div class="label">Kedalaman rata-rata</div><div class="value" id="kDepth">—</div></div>
+  </section>
+  <section class="charts">
+    <div class="panel chartbox"><h2>Frekuensi gempa per bulan</h2><canvas id="monthly"></canvas></div>
+    <div class="panel chartbox"><h2>Distribusi magnitudo</h2><canvas id="mags"></canvas></div>
+    <div class="panel chartbox"><h2>Kedalaman hiposenter</h2><canvas id="depths"></canvas></div>
+    <div class="panel chartbox"><h2>Magnitudo vs. kedalaman</h2><canvas id="scatter"></canvas></div>
+  </section>
+  <section class="panel">
+    <h2>Data kejadian gempa</h2>
+    <div class="actions" style="margin-bottom:12px"><button id="csv">Unduh CSV</button><button id="excel" class="secondary">Unduh CSV untuk Excel</button></div>
+    <div class="tablewrap"><table><thead><tr><th>Waktu (UTC)</th><th>Magnitudo</th><th>Kedalaman (km)</th><th>Lintang</th><th>Bujur</th><th>Lokasi</th><th>Detail</th></tr></thead><tbody id="rows"><tr><td colspan="7">Belum ada data. Klik “Muat / Terapkan”.</td></tr></tbody></table></div>
+  </section>
+  <section class="panel">
+    <h2>Catatan penggunaan dan sumber</h2>
+    <p class="note">Data ditarik langsung dari katalog gempa USGS untuk wilayah Indonesia (lintang -11 sampai 6°, bujur 95 sampai 141°). Nilai kedalaman adalah kedalaman hiposenter yang dilaporkan katalog, bukan kedalaman hasil interpretasi baru. Magnitudo dan jumlah kejadian bergantung pada rentang tanggal, ambang magnitudo, serta pembaruan katalog.</p>
+    <p class="note">Sumber resmi: <a href="https://earthquake.usgs.gov/fdsnws/event/1/" target="_blank" rel="noopener">USGS FDSN Event Web Service</a> · <a href="https://earthquake.usgs.gov/earthquakes/search/" target="_blank" rel="noopener">USGS Earthquake Search</a>.</p>
+  </section>
+</main>
+<script>
+const $=id=>document.getElementById(id); let data=[]; let charts={};
+const fmt=(v,d=1)=>Number.isFinite(v)?v.toLocaleString('id-ID',{maximumFractionDigits:d,minimumFractionDigits:d}):'—';
+function chart(id,type,labels,datasets,extra={}){if(charts[id])charts[id].destroy();charts[id]=new Chart($(id),{type,data:{labels,datasets},options:{responsive:true,maintainAspectRatio:true,animation:{duration:180},plugins:{legend:{display:true}},scales:type==='scatter'?{x:{title:{display:true,text:'Kedalaman (km)'}},y:{title:{display:true,text:'Magnitudo'}}}:{x:{ticks:{maxRotation:35}},y:{beginAtZero:true,...extra.y},...(extra.scales||{})}}});}
+function updateView(){
+ const n=data.length, mags=data.map(d=>d.mag).filter(Number.isFinite), dep=data.map(d=>d.depth).filter(Number.isFinite);
+ $('kCount').textContent=n.toLocaleString('id-ID');$('kMag').textContent=mags.length?fmt(mags.reduce((a,b)=>a+b,0)/mags.length,2):'—';
+ $('kMax').textContent=mags.length?fmt(Math.max(...mags),1):'—';$('kDepth').textContent=dep.length?fmt(dep.reduce((a,b)=>a+b,0)/dep.length,1)+' km':'—';
+ const monthNames=['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];let counts=Array(12).fill(0);
+ data.forEach(d=>{if(d.time){let m=new Date(d.time).getUTCMonth();counts[m]++}});
+ chart('monthly','bar',monthNames,[{label:'Jumlah gempa',data:counts,backgroundColor:'#168b91'}]);
+ const bins=['2.5–2.9','3.0–3.4','3.5–3.9','4.0–4.4','4.5–4.9','5.0–5.4','5.5–5.9','6.0+'];let bc=Array(8).fill(0);
+ mags.forEach(m=>{let i=m>=6?7:Math.max(0,Math.min(6,Math.floor((m-2.5)/.5)));bc[i]++});
+ chart('mags','bar',bins,[{label:'Jumlah kejadian',data:bc,backgroundColor:'#3d7899'}]);
+ const dbins=['0–50','50–100','100–200','200–300','300+'];let dc=Array(5).fill(0);
+ dep.forEach(d=>{let i=d<50?0:d<100?1:d<200?2:d<300?3:4;dc[i]++});
+ chart('depths','bar',dbins,[{label:'Jumlah kejadian',data:dc,backgroundColor:'#d29a48'}]);
+ chart('scatter','scatter',[],[{label:'Kejadian gempa',data:data.filter(d=>Number.isFinite(d.mag)&&Number.isFinite(d.depth)).map(d=>({x:d.depth,y:d.mag})),backgroundColor:'#168b91',pointRadius:3}],{});
+ $('rows').innerHTML=data.slice(0,500).map(d=>`<tr><td>${d.time?new Date(d.time).toISOString().replace('T',' ').slice(0,19):'—'}</td><td>${Number.isFinite(d.mag)?d.mag.toFixed(1):'—'}</td><td>${Number.isFinite(d.depth)?d.depth.toFixed(1):'—'}</td><td>${d.lat.toFixed(3)}</td><td>${d.lon.toFixed(3)}</td><td>${escapeHtml(d.place||'Tidak diketahui')}</td><td>${d.url?`<a href="${d.url}" target="_blank" rel="noopener">USGS</a>`:'—'}</td></tr>`).join('')||'<tr><td colspan="7">Tidak ada kejadian sesuai filter.</td></tr>';
+}
+function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+async function load(){
+ const start=$('start').value,end=$('end').value,minmag=$('minmag').value,limit=$('limit').value;
+ if(!start||!end||start>end){$('status').textContent='Periksa tanggal: tanggal mulai harus sebelum tanggal akhir.';$('status').className='status error';return}
+ const url=new URL('https://earthquake.usgs.gov/fdsnws/event/1/query');
+ Object.entries({format:'geojson',starttime:start,endtime:end,minlatitude:-11,maxlatitude:6,minlongitude:95,maxlongitude:141,minmagnitude:minmag,orderby:'time-asc',limit}).forEach(([k,v])=>url.searchParams.set(k,v));
+ $('status').textContent='Mengambil data dari USGS…';$('status').className='status';
+ $('load').disabled=true;
+ try{
+  const r=await fetch(url);if(!r.ok)throw new Error('HTTP '+r.status);const j=await r.json();
+  data=(j.features||[]).map(f=>{const p=f.properties||{},c=(f.geometry&&f.geometry.coordinates)||[NaN,NaN,NaN];return {time:p.time,mag:p.mag,depth:c[2],lon:c[0],lat:c[1],place:p.place,url:p.url,id:f.id}}).filter(d=>Number.isFinite(d.lat)&&Number.isFinite(d.lon));
+  updateView();$('status').textContent=`Berhasil memuat ${data.length.toLocaleString('id-ID')} kejadian. Rentang: ${start} sampai ${end}. Sumber: USGS.`; 
+ }catch(e){$('status').textContent='Gagal mengambil data. Periksa koneksi internet atau coba lagi. Detail: '+e.message;$('status').className='status error'}
+ finally{$('load').disabled=false}
+}
+function downloadCSV(){
+ if(!data.length){alert('Muat data terlebih dahulu.');return}
+ const headers=['time_utc','magnitude','depth_km','latitude','longitude','place','usgs_url'];
+ const lines=[headers.join(','),...data.map(d=>[d.time?new Date(d.time).toISOString():'',d.mag??'',d.depth??'',d.lat,d.lon,`"${String(d.place||'').replace(/"/g,'""')}"`,d.url||''].join(','))];
+ const blob=new Blob(['\ufeff'+lines.join('\r\n')],{type:'text/csv;charset=utf-8;'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='data_gempa_indonesia_usgs.csv';a.click();URL.revokeObjectURL(a.href);
+}
+$('load').addEventListener('click',load);$('csv').addEventListener('click',downloadCSV);$('excel').addEventListener('click',downloadCSV);
+$('reset').addEventListener('click',()=>{$('start').value='2025-01-01';$('end').value='2025-12-31';$('minmag').value='4.5';$('limit').value='1000';load()});
+load();
+</script>
+</body>
+</html>
